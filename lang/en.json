@@ -1,0 +1,15 @@
+{
+  "APEX": {
+    "Title": "RNK Apex Optimizer",
+    "Subtitle": "Zero-touch dual VQ optimization",
+    "Status": "Status",
+    "Cluster": "Cluster",
+    "AutoOn": "AUTO ON",
+    "AutoOff": "AUTO OFF",
+    "OptimizeNow": "Optimize Now",
+    "DryRun": "Dry Run",
+    "Refresh": "Refresh",
+    "Log": "Activity log",
+    "SettingsHint": "Configure Apex under Module Settings. Auto-optimize is on by default."
+  }
+}

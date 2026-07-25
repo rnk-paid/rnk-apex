@@ -1,0 +1,18 @@
+{
+  "id": "APEX",
+  "name": "Apex",
+  "role": "optimizer-bridge",
+  "port": 3002,
+  "host": "0.0.0.0",
+  "prometheusUrl": "http://127.0.0.1:3000",
+  "oracleUrl": "http://127.0.0.1:3001",
+  "balanceMode": "affinity-least-load",
+  "autoOptimize": true,
+  "autoIntervalMs": 60000,
+  "requestTimeoutMs": 30000,
+  "healthIntervalMs": 5000,
+  "failover": {
+    "maxConsecutiveFailures": 3,
+    "cooldownMs": 15000
+  }
+}

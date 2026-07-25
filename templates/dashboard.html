@@ -1,0 +1,70 @@
+<section class="rnk-apex-panel">
+  <header class="rnk-apex-header">
+    <div>
+      <h2>RNK Apex™</h2>
+      <p class="rnk-apex-sub">Zero-touch optimizer · Prometheus (VQ-1) + Oracle (VQ-2)</p>
+    </div>
+    <div class="rnk-apex-chips">
+      <span class="rnk-apex-chip {{#if auto}}ok{{else}}warn{{/if}}">{{#if auto}}AUTO ON{{else}}AUTO OFF{{/if}}</span>
+      <span class="rnk-apex-chip {{#if clusterOk}}ok{{else}}{{#if clusterDegraded}}warn{{else}}bad{{/if}}{{/if}}">
+        CLUSTER {{clusterStatus}}
+      </span>
+      <span class="rnk-apex-chip {{#if patreonAuthenticated}}ok{{else}}bad{{/if}}" data-patreon-auth-chip data-state="{{#if patreonAuthenticated}}authenticated{{else}}locked{{/if}}">
+        {{patreonChip}}
+      </span>
+    </div>
+  </header>
+
+  <div class="rnk-apex-actions rnk-apex-auth-actions">
+    {{#if patreonAuthenticated}}
+    <button type="button" class="rnk-apex-btn" data-action="patreon-logout">Patreon Logout</button>
+    {{else}}
+    <button type="button" class="rnk-apex-btn primary" data-action="patreon-login">Patreon Login</button>
+    <p class="rnk-apex-meta">Active patron required · <a href="https://www.patreon.com/RagNaroks" target="_blank" rel="noopener">patreon.com/RagNaroks</a></p>
+    {{/if}}
+  </div>
+
+  <div class="rnk-apex-grid">
+    <div class="rnk-apex-card">
+      <h3>Dual VQ</h3>
+      <div class="rnk-apex-row">
+        <span class="rnk-apex-chip {{#if prometheusHealthy}}ok{{else}}bad{{/if}}">PROMETHEUS</span>
+        <span class="rnk-apex-chip {{#if oracleHealthy}}ok{{else}}bad{{/if}}">ORACLE</span>
+      </div>
+      <p class="rnk-apex-meta">Nodes healthy: {{healthyCount}} / {{totalCount}}</p>
+      <p class="rnk-apex-meta">Bridge: <code>{{bridgeUrl}}</code></p>
+      <p class="rnk-apex-meta">Auth: <code>{{authUrl}}</code></p>
+    </div>
+
+    <div class="rnk-apex-card">
+      <h3>Registry</h3>
+      <p class="rnk-apex-meta">Engines: <strong>{{engines}}</strong></p>
+      <p class="rnk-apex-meta">Turbos: <strong>{{turbos}}</strong></p>
+      <p class="rnk-apex-meta">Libraries: <strong>{{libraries}}</strong></p>
+    </div>
+
+    <div class="rnk-apex-card">
+      <h3>Last run</h3>
+      <p class="rnk-apex-meta">Duration: <strong>{{lastDuration}}</strong></p>
+      <p class="rnk-apex-meta">FPS: <strong>{{lastFps}}</strong></p>
+      <p class="rnk-apex-meta">Chat deleted: <strong>{{lastChatDeleted}}</strong></p>
+    </div>
+
+    <div class="rnk-apex-card">
+      <h3>Dry run</h3>
+      <p class="rnk-apex-meta">Chat would delete: <strong>{{dryChat}}</strong></p>
+      <p class="rnk-apex-meta">Combats would delete: <strong>{{dryCombats}}</strong></p>
+    </div>
+  </div>
+
+  <div class="rnk-apex-actions">
+    <button type="button" class="rnk-apex-btn primary" data-action="run" {{#unless patreonAuthenticated}}disabled{{/unless}}>Optimize Now</button>
+    <button type="button" class="rnk-apex-btn" data-action="dryRun" {{#unless patreonAuthenticated}}disabled{{/unless}}>Dry Run</button>
+    <button type="button" class="rnk-apex-btn" data-action="refresh">Refresh</button>
+  </div>
+
+  <div class="rnk-apex-card">
+    <h3>Activity log</h3>
+    <pre class="rnk-apex-log">{{logs}}</pre>
+  </div>
+</section>

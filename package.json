@@ -1,0 +1,25 @@
+{
+  "name": "rnk-apex",
+  "version": "4.2.0",
+  "description": "RNK Apex — Patreon-gated Foundry optimizer + dual bridge for Prometheus/Oracle",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node bin/start.mjs",
+    "start:bridge": "node bin/start.mjs",
+    "start:auth": "node patreon-auth-server.js",
+    "check": "node --check bin/start.mjs && node --check server/index.js && node --check server/load-balancer.js",
+    "pack:module": "node scripts/pack-module.mjs"
+  },
+  "dependencies": {
+    "axios": "^1.6.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.22.1",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

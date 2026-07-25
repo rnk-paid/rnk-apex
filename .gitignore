@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+node_modules/
+module.zip
+test_download/
+zips/
+staging/
+.venv/
+desktop.ini
+.vscode/
+logs/
+data/*.json
+!data/.gitkeep
+*.log
+.DS_Store

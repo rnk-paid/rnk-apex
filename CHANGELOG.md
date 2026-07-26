@@ -1,5 +1,12 @@
 # Changelog
 
+## v4.2.2 — 2026-07-26
+
+- Fix Patreon unlock when Foundry opens system Chrome (no `window.opener`)
+- Embed a hidden `/auth/relay` iframe so the JWT reaches Foundry via `parent.postMessage`
+- Stop falsely showing “Connected” on the bridge when Foundry never received the token
+- Keep `/auth/token` non-destructive so polling cannot race-lose the JWT
+
 ## v4.2.1 — 2026-07-26
 
 - Fix Patreon login succeeding in the browser while Apex stayed locked

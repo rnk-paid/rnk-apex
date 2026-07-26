@@ -173,7 +173,7 @@ export function createPatreonAuthController({
     return data?.token || null;
   }
 
-  async function authSupportsBridge(authBaseUrl) {
+  async function fetchAuthCapabilities(authBaseUrl) {
     try {
       const response = await fetch(`${authBaseUrl}/auth/capabilities`, {
         method: "GET",
@@ -181,11 +181,10 @@ export function createPatreonAuthController({
         cache: "no-store",
         headers: { Accept: "application/json" },
       });
-      if (!response.ok) return false;
-      const data = await response.json().catch(() => null);
-      return Boolean(data?.bridge);
+      if (!response.ok) return {};
+      return await response.json().catch(() => ({})) || {};
     } catch (_error) {
-      return false;
+      return {};
     }
   }
 
@@ -202,6 +201,28 @@ export function createPatreonAuthController({
     try { popup.focus(); } catch (_error) {}
     activePopup = popup;
     return popup;
+  }
+
+  function mountRelayIframe(authBaseUrl, state) {
+    const id = `${moduleName}-patreon-relay`;
+    document.getElementById(id)?.remove();
+    const iframe = document.createElement("iframe");
+    iframe.id = id;
+    iframe.title = "RNK Patreon auth relay";
+    iframe.src = `${authBaseUrl}/auth/relay?state=${encodeURIComponent(state)}`;
+    iframe.setAttribute("aria-hidden", "true");
+    Object.assign(iframe.style, {
+      position: "fixed",
+      width: "1px",
+      height: "1px",
+      opacity: "0",
+      pointerEvents: "none",
+      border: "0",
+      left: "-1000px",
+      top: "0",
+    });
+    document.body.appendChild(iframe);
+    return iframe;
   }
 
   async function login({ force = false } = {}) {
@@ -221,7 +242,9 @@ export function createPatreonAuthController({
       }
 
       const state = getRandomState();
-      const useBridge = await authSupportsBridge(authBaseUrl);
+      const capabilities = await fetchAuthCapabilities(authBaseUrl);
+      const useBridge = Boolean(capabilities.bridge);
+      const useRelay = Boolean(capabilities.relay);
       const popup = openPopup(authBaseUrl, state, useBridge);
       if (!popup) {
         loginInFlight = null;
@@ -233,14 +256,16 @@ export function createPatreonAuthController({
       const timeoutMs = 10 * 60 * 1000;
       const started = Date.now();
       let pollTimer = null;
-      let watchTimer = null;
-      let burstTimer = null;
+      let relayFrame = null;
 
       const cleanup = () => {
         window.removeEventListener("message", onMessage);
         if (pollTimer) window.clearInterval(pollTimer);
-        if (watchTimer) window.clearInterval(watchTimer);
-        if (burstTimer) window.clearInterval(burstTimer);
+        if (relayFrame) {
+          try { relayFrame.remove(); } catch (_error) {}
+          relayFrame = null;
+        }
+        document.getElementById(`${moduleName}-patreon-relay`)?.remove();
         if (activePopup === popup) activePopup = null;
         loginInFlight = null;
       };
@@ -279,28 +304,15 @@ export function createPatreonAuthController({
         }
       };
 
-      const startBurstPoll = () => {
-        if (finished || burstTimer) return;
-        let remaining = 15;
-        burstTimer = window.setInterval(async () => {
-          if (finished) {
-            window.clearInterval(burstTimer);
-            burstTimer = null;
-            return;
-          }
-          remaining -= 1;
-          await pollOnce();
-          if (remaining <= 0) {
-            window.clearInterval(burstTimer);
-            burstTimer = null;
-          }
-        }, 400);
-      };
-
       window.addEventListener("message", onMessage);
 
-      // Immediate poll + steady poll. Patreon clears window.opener on many browsers,
-      // so /auth/token/:state is the real delivery path when postMessage fails.
+      // Hidden same-origin relay iframe: success/bridge pages BroadcastChannel the
+      // JWT on the auth host; the iframe forwards it to Foundry via parent.postMessage
+      // even when the Patreon popup was opened in an external browser (no opener).
+      if (useRelay) {
+        try { relayFrame = mountRelayIframe(authBaseUrl, state); } catch (_error) {}
+      }
+
       pollOnce();
       pollTimer = window.setInterval(async () => {
         if (finished) return;
@@ -309,20 +321,9 @@ export function createPatreonAuthController({
           return;
         }
         await pollOnce();
-      }, 1000);
-
-      watchTimer = window.setInterval(() => {
-        if (finished) return;
-        if (!popup.closed) return;
-        // Opener is often severed after Patreon redirects, and Foundry may also
-        // hand the flow to an external browser. Keep polling for the full TTL;
-        // only burst harder once the shell window reports closed.
-        startBurstPoll();
-        if (watchTimer) {
-          window.clearInterval(watchTimer);
-          watchTimer = null;
-        }
       }, 500);
+
+      ui.notifications?.info?.("RNK: Complete Patreon login in the popup, then return here.");
     });
 
     return loginInFlight;

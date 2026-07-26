@@ -1,6 +1,6 @@
 # RNK PROPRIETARY LICENSE v1.0
 
-**Licensed Software:** RNK Apex™ Optimizer v4.2.1+  
+**Licensed Software:** RNK Apex™ Optimizer v4.2.2+  
 **Copyright:** RNK Enterprise™ 2026  
 **License Effective Date:** July 25, 2026  
 

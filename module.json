@@ -2,7 +2,7 @@
   "id": "rnk-apex",
   "title": "RNK Apex™ Optimizer",
   "description": "Patreon-gated Foundry optimizer powered by Prometheus/Oracle optimize-core. Senses FPS/jitter/heap/mod-stack, recommends via AI libs, applies safe core tweaks, and load-shares across the dual VQ cluster.<br><a href='https://www.patreon.com/RagNaroks'><b>Full updates & exclusives on Patreon</b></a>.",
-  "version": "4.2.1",
+  "version": "4.2.2",
   "protected": false,
   "compatibility": {
     "minimum": 11,
@@ -31,7 +31,7 @@
   },
   "url": "https://github.com/rnk-paid/rnk-apex",
   "manifest": "https://raw.githubusercontent.com/rnk-paid/rnk-apex/main/module.json",
-  "download": "https://github.com/rnk-paid/rnk-apex/releases/download/v4.2.1/module.zip",
+  "download": "https://github.com/rnk-paid/rnk-apex/releases/download/v4.2.2/module.zip",
   "readme": "https://github.com/rnk-paid/rnk-apex/blob/main/README.md",
   "changelog": "https://github.com/rnk-paid/rnk-apex/blob/main/CHANGELOG.md"
 }

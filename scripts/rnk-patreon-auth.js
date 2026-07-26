@@ -54,6 +54,7 @@ export function createPatreonAuthController({
     claims: null,
   };
   let loginInFlight = null;
+  let activePopup = null;
 
   function getAuthBaseUrl() {
     const configured = game.settings.get(moduleName, settingKey);
@@ -163,27 +164,52 @@ export function createPatreonAuthController({
       method: "GET",
       credentials: "omit",
       cache: "no-store",
+      headers: { Accept: "application/json" },
     });
+    // 202 = authorized flow still in progress on newer auth hosts
+    if (response.status === 202) return null;
     if (!response.ok) return null;
     const data = await response.json().catch(() => null);
     return data?.token || null;
   }
 
-  function openPopup(authBaseUrl, state) {
-    const loginUrl = `${authBaseUrl}/auth/authorize?state=${encodeURIComponent(state)}`;
+  async function authSupportsBridge(authBaseUrl) {
+    try {
+      const response = await fetch(`${authBaseUrl}/auth/capabilities`, {
+        method: "GET",
+        credentials: "omit",
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) return false;
+      const data = await response.json().catch(() => null);
+      return Boolean(data?.bridge);
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function openPopup(authBaseUrl, state, useBridge) {
+    const path = useBridge ? "bridge" : "authorize";
+    const loginUrl = `${authBaseUrl}/auth/${path}?state=${encodeURIComponent(state)}`;
     const popupName = `${moduleName}-patreon-auth`;
-    const features = "width=520,height=760,menubar=no,toolbar=no,location=no,status=no";
+    const features = "width=520,height=760,menubar=no,toolbar=no,location=yes,status=no";
     const popup = window.open(loginUrl, popupName, features);
     if (!popup) {
       ui.notifications.warn("RNK: Popup blocked. Allow popups for Patreon login.");
       return null;
     }
     try { popup.focus(); } catch (_error) {}
+    activePopup = popup;
     return popup;
   }
 
-  async function login() {
-    if (loginInFlight) return loginInFlight;
+  async function login({ force = false } = {}) {
+    if (loginInFlight && !force) {
+      // If the prior popup is gone, allow a fresh attempt with a new state.
+      if (activePopup && !activePopup.closed) return loginInFlight;
+      loginInFlight = null;
+    }
 
     loginInFlight = new Promise(async (resolve) => {
       const authBaseUrl = getAuthBaseUrl();
@@ -195,7 +221,8 @@ export function createPatreonAuthController({
       }
 
       const state = getRandomState();
-      const popup = openPopup(authBaseUrl, state);
+      const useBridge = await authSupportsBridge(authBaseUrl);
+      const popup = openPopup(authBaseUrl, state, useBridge);
       if (!popup) {
         loginInFlight = null;
         resolve(null);
@@ -206,12 +233,15 @@ export function createPatreonAuthController({
       const timeoutMs = 10 * 60 * 1000;
       const started = Date.now();
       let pollTimer = null;
-      let messageTimer = null;
+      let watchTimer = null;
+      let burstTimer = null;
 
       const cleanup = () => {
         window.removeEventListener("message", onMessage);
         if (pollTimer) window.clearInterval(pollTimer);
-        if (messageTimer) window.clearInterval(messageTimer);
+        if (watchTimer) window.clearInterval(watchTimer);
+        if (burstTimer) window.clearInterval(burstTimer);
+        if (activePopup === popup) activePopup = null;
         loginInFlight = null;
       };
 
@@ -220,7 +250,16 @@ export function createPatreonAuthController({
         finished = true;
         writeToken(token);
         cleanup();
+        try { if (!popup.closed) popup.close(); } catch (_error) {}
         resolve(token);
+      };
+
+      const fail = (message) => {
+        if (finished) return;
+        finished = true;
+        cleanup();
+        if (message) ui.notifications.warn(message);
+        resolve(null);
       };
 
       const onMessage = (event) => {
@@ -231,31 +270,59 @@ export function createPatreonAuthController({
         }
       };
 
-      window.addEventListener("message", onMessage);
-
-      pollTimer = window.setInterval(async () => {
-        if (finished) return;
-        if (Date.now() - started > timeoutMs) {
-          cleanup();
-          ui.notifications.warn("RNK: Patreon login timed out.");
-          resolve(null);
-          return;
-        }
-
+      const pollOnce = async () => {
         try {
           const token = await fetchTokenFromState(state);
           if (token) complete(token);
         } catch (_error) {
           // Ignore transient network noise and keep polling.
         }
+      };
+
+      const startBurstPoll = () => {
+        if (finished || burstTimer) return;
+        let remaining = 15;
+        burstTimer = window.setInterval(async () => {
+          if (finished) {
+            window.clearInterval(burstTimer);
+            burstTimer = null;
+            return;
+          }
+          remaining -= 1;
+          await pollOnce();
+          if (remaining <= 0) {
+            window.clearInterval(burstTimer);
+            burstTimer = null;
+          }
+        }, 400);
+      };
+
+      window.addEventListener("message", onMessage);
+
+      // Immediate poll + steady poll. Patreon clears window.opener on many browsers,
+      // so /auth/token/:state is the real delivery path when postMessage fails.
+      pollOnce();
+      pollTimer = window.setInterval(async () => {
+        if (finished) return;
+        if (Date.now() - started > timeoutMs) {
+          fail("RNK: Patreon login timed out.");
+          return;
+        }
+        await pollOnce();
       }, 1000);
 
-      messageTimer = window.setInterval(() => {
+      watchTimer = window.setInterval(() => {
         if (finished) return;
-        if (popup.closed) {
-          // Do not resolve yet; the token may still be available from the server endpoint.
+        if (!popup.closed) return;
+        // Opener is often severed after Patreon redirects, and Foundry may also
+        // hand the flow to an external browser. Keep polling for the full TTL;
+        // only burst harder once the shell window reports closed.
+        startBurstPoll();
+        if (watchTimer) {
+          window.clearInterval(watchTimer);
+          watchTimer = null;
         }
-      }, 1000);
+      }, 500);
     });
 
     return loginInFlight;
@@ -287,7 +354,7 @@ export function createPatreonAuthController({
 
     loginButton?.addEventListener("click", async (event) => {
       event.preventDefault();
-      const token = await login();
+      const token = await login({ force: true });
       if (token) ui.notifications.info(`RNK: Patreon login complete — ${getAccessLevel()} access granted.`);
       syncStatusChip(root);
     });

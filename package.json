@@ -1,6 +1,6 @@
 {
   "name": "rnk-apex",
-  "version": "4.2.0",
+  "version": "4.2.1",
   "description": "RNK Apex — Patreon-gated Foundry optimizer + dual bridge for Prometheus/Oracle",
   "type": "module",
   "private": true,

@@ -1,5 +1,11 @@
 # Changelog
 
+## v4.2.1 — 2026-07-26
+
+- Fix Patreon login succeeding in the browser while Apex stayed locked
+- Prefer `/auth/bridge` when the auth host supports it (keeps `window.opener`)
+- Harden token polling after Patreon clears the opener; refresh dashboard on auth change
+
 ## v4.2.0 — 2026-07-25
 
 - Add Patreon OAuth gate (MapGen-shared auth controller + world token)

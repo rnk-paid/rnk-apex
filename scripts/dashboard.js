@@ -43,6 +43,26 @@ function buildAppV2() {
       return prepareData();
     }
 
+    _onRender(context, options) {
+      super._onRender?.(context, options);
+      if (this._authHook) return;
+      this._authHook = Hooks.on('rnkApexAuthChanged', () => {
+        try {
+          this.render({ force: true });
+        } catch {
+          /* ignore */
+        }
+      });
+    }
+
+    async close(options) {
+      if (this._authHook != null) {
+        try { Hooks.off('rnkApexAuthChanged', this._authHook); } catch { /* ignore */ }
+        this._authHook = null;
+      }
+      return super.close(options);
+    }
+
     static async #onRun(event, _target) {
       event.preventDefault();
       if (!requireApexAuth()) return;
@@ -64,13 +84,17 @@ function buildAppV2() {
 
     static async #onPatreonLogin(event, _target) {
       event.preventDefault();
-      const token = await getApexAuth().login();
+      const token = await getApexAuth().login({ force: true });
       if (token) {
         ui.notifications?.info?.('Apex: Patreon login complete.');
         if (ApexSettings.get('autoOptimize') !== false) {
           apexAutoPilot.startScheduler();
           apexAutoPilot.runOnce({ reason: 'patreon-login' }).catch(() => {});
         }
+      } else if (!getApexAuth().hasToken()) {
+        ui.notifications?.warn?.(
+          'Apex: Patreon login did not complete in Foundry. Keep the auth window open until it says Connected, then try again.'
+        );
       }
       this.render({ force: true });
     }
@@ -109,6 +133,11 @@ function buildFormApp() {
       super.activateListeners(html);
       const root = html[0] ?? html;
       getApexAuth().bindUI(root);
+      if (this._authHook == null) {
+        this._authHook = Hooks.on('rnkApexAuthChanged', () => {
+          try { this.render(true); } catch { /* ignore */ }
+        });
+      }
 
       root.querySelector('[data-action="run"]')?.addEventListener('click', async (ev) => {
         ev.preventDefault();
@@ -129,6 +158,14 @@ function buildFormApp() {
     }
 
     async _updateObject() {}
+
+    async close(options) {
+      if (this._authHook != null) {
+        try { Hooks.off('rnkApexAuthChanged', this._authHook); } catch { /* ignore */ }
+        this._authHook = null;
+      }
+      return super.close(options);
+    }
   };
 }
 

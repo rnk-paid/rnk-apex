@@ -31,15 +31,17 @@ PORT=3000
 ## Module client flow
 
 1. GM opens Apex → Patreon Login
-2. Client probes `{authBase}/auth/capabilities` — if `bridge: true`, opens
-   `{authBase}/auth/bridge?state=…` (same-origin shell that keeps `window.opener`)
-3. Bridge opens Patreon via `{authBase}/auth/authorize?state=…`
-4. Patreon callback → auth server issues JWT, stores it (memory + disk) for polling
-5. Token returns to Foundry via, in order:
-   - bridge `postMessage` to Foundry (preferred)
-   - `BroadcastChannel` / `localStorage` from success page → bridge → Foundry
-   - `GET /auth/token/:state` polling fallback
-6. Token stored in world setting `patreonSharedToken` (all GMs in that world)
+2. Client probes `{authBase}/auth/capabilities`
+3. If `relay: true`, mounts a hidden iframe to `{authBase}/auth/relay?state=…`
+   (this is the path that works when Foundry opens system Chrome with no opener)
+4. Opens `{authBase}/auth/bridge?state=…` (or `/auth/authorize` on older hosts)
+5. Patreon callback → auth server issues JWT and stores it for polling
+6. Token returns to Foundry via, in order:
+   - relay iframe `parent.postMessage` (preferred for Electron/external browser)
+   - bridge `postMessage` to Foundry when `window.opener` still exists
+   - `BroadcastChannel` / `localStorage` on the auth host → relay/bridge
+   - `GET /auth/token/:state` / `/auth/peek/:state` polling fallback
+7. Token stored in world setting `patreonSharedToken` (all GMs in that world)
 
 ### Why patrons see "Authentication Successful" but Apex stays locked
 

@@ -93,7 +93,7 @@ function buildAppV2() {
         }
       } else if (!getApexAuth().hasToken()) {
         ui.notifications?.warn?.(
-          'Apex: Patreon login did not complete in Foundry. Keep the auth window open until it says Connected, then try again.'
+          'Apex: Patreon login did not finish. If a popup was blocked, use the dialog / allow popups, complete Allow on Patreon, then return here.'
         );
       }
       this.render({ force: true });

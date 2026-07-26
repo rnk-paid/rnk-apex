@@ -17,7 +17,7 @@ Hooks.once('init', () => {
     apexAutoPilot,
     getApexAuth,
     isApexAuthenticated,
-    version: '4.2.2'
+    version: '4.2.3'
   };
 });
 
@@ -30,6 +30,13 @@ Hooks.once('ready', async () => {
   }
 
   console.log(`${MODULE_ID} | Ready — dual-aware auto-pilot (Patreon gated)`);
+
+  // Warm auth capabilities so Patreon Login can open the popup in the same click turn.
+  try {
+    await getApexAuth().prefetchCapabilities?.();
+  } catch {
+    /* ignore */
+  }
 
   if (ApexSettings.get('autoOptimize') === false) {
     apexAutoPilot.log('auto-optimize disabled in settings');

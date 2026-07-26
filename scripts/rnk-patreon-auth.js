@@ -55,6 +55,8 @@ export function createPatreonAuthController({
   };
   let loginInFlight = null;
   let activePopup = null;
+  let cachedCapabilities = null;
+  let cachedCapabilitiesAt = 0;
 
   function getAuthBaseUrl() {
     const configured = game.settings.get(moduleName, settingKey);
@@ -182,22 +184,40 @@ export function createPatreonAuthController({
         headers: { Accept: "application/json" },
       });
       if (!response.ok) return {};
-      return await response.json().catch(() => ({})) || {};
+      const data = await response.json().catch(() => ({})) || {};
+      cachedCapabilities = data;
+      cachedCapabilitiesAt = Date.now();
+      return data;
     } catch (_error) {
-      return {};
+      return cachedCapabilities || {};
     }
   }
 
-  function openPopup(authBaseUrl, state, useBridge) {
+  function getCachedCapabilities() {
+    if (cachedCapabilities && Date.now() - cachedCapabilitiesAt < 30 * 60 * 1000) {
+      return cachedCapabilities;
+    }
+    return null;
+  }
+
+  /** Prefetch so the next Patreon Login click can open the correct URL without awaiting. */
+  async function prefetchCapabilities() {
+    const authBaseUrl = getAuthBaseUrl();
+    if (!authBaseUrl) return null;
+    return fetchAuthCapabilities(authBaseUrl);
+  }
+
+  function loginUrlFor(authBaseUrl, state, useBridge) {
     const path = useBridge ? "bridge" : "authorize";
-    const loginUrl = `${authBaseUrl}/auth/${path}?state=${encodeURIComponent(state)}`;
+    return `${authBaseUrl}/auth/${path}?state=${encodeURIComponent(state)}`;
+  }
+
+  function openPopupSync(loginUrl) {
+    // Must run in the same turn as the user click — any prior await loses popup permission.
     const popupName = `${moduleName}-patreon-auth`;
     const features = "width=520,height=760,menubar=no,toolbar=no,location=yes,status=no";
     const popup = window.open(loginUrl, popupName, features);
-    if (!popup) {
-      ui.notifications.warn("RNK: Popup blocked. Allow popups for Patreon login.");
-      return null;
-    }
+    if (!popup) return null;
     try { popup.focus(); } catch (_error) {}
     activePopup = popup;
     return popup;
@@ -225,6 +245,38 @@ export function createPatreonAuthController({
     return iframe;
   }
 
+  function promptBlockedPopup(loginUrl) {
+    const openLogin = () => {
+      const popup = openPopupSync(loginUrl);
+      if (!popup) {
+        // Last resort: top-level navigation in a new tab from a fresh user gesture.
+        window.open(loginUrl, "_blank");
+      }
+    };
+
+    try {
+      if (globalThis.Dialog?.confirm || globalThis.Dialog) {
+        // Foundry Dialog button clicks restore the user-gesture for window.open.
+        new Dialog({
+          title: "Patreon Login",
+          content: "<p>Your browser blocked the Patreon popup. Click below to continue login.</p>",
+          buttons: {
+            login: {
+              icon: '<i class="fas fa-right-to-bracket"></i>',
+              label: "Open Patreon Login",
+              callback: openLogin
+            },
+            cancel: { label: "Cancel" }
+          },
+          default: "login"
+        }).render(true);
+        return;
+      }
+    } catch (_error) {}
+
+    openLogin();
+  }
+
   async function login({ force = false } = {}) {
     if (loginInFlight && !force) {
       // If the prior popup is gone, allow a fresh attempt with a new state.
@@ -232,26 +284,26 @@ export function createPatreonAuthController({
       loginInFlight = null;
     }
 
+    const authBaseUrl = getAuthBaseUrl();
+    if (!authBaseUrl) {
+      ui.notifications.error("RNK: Patreon auth server URL is not configured.");
+      return null;
+    }
+
+    const state = getRandomState();
+    const cached = getCachedCapabilities();
+    // Default to bridge on this auth host — safe even before capabilities return.
+    const useBridgeGuess = cached ? Boolean(cached.bridge) : true;
+    const initialUrl = loginUrlFor(authBaseUrl, state, useBridgeGuess);
+
+    // Open SYNCHRONOUSLY before any await (fixes "Popup blocked" after capabilities fetch).
+    let popup = openPopupSync(initialUrl);
+    if (!popup) {
+      ui.notifications.warn("RNK: Popup blocked — use the dialog to open Patreon login.");
+      promptBlockedPopup(initialUrl);
+    }
+
     loginInFlight = new Promise(async (resolve) => {
-      const authBaseUrl = getAuthBaseUrl();
-      if (!authBaseUrl) {
-        ui.notifications.error("RNK: Patreon auth server URL is not configured.");
-        loginInFlight = null;
-        resolve(null);
-        return;
-      }
-
-      const state = getRandomState();
-      const capabilities = await fetchAuthCapabilities(authBaseUrl);
-      const useBridge = Boolean(capabilities.bridge);
-      const useRelay = Boolean(capabilities.relay);
-      const popup = openPopup(authBaseUrl, state, useBridge);
-      if (!popup) {
-        loginInFlight = null;
-        resolve(null);
-        return;
-      }
-
       let finished = false;
       const timeoutMs = 10 * 60 * 1000;
       const started = Date.now();
@@ -275,7 +327,7 @@ export function createPatreonAuthController({
         finished = true;
         writeToken(token);
         cleanup();
-        try { if (!popup.closed) popup.close(); } catch (_error) {}
+        try { if (popup && !popup.closed) popup.close(); } catch (_error) {}
         resolve(token);
       };
 
@@ -306,9 +358,16 @@ export function createPatreonAuthController({
 
       window.addEventListener("message", onMessage);
 
-      // Hidden same-origin relay iframe: success/bridge pages BroadcastChannel the
-      // JWT on the auth host; the iframe forwards it to Foundry via parent.postMessage
-      // even when the Patreon popup was opened in an external browser (no opener).
+      const capabilities = await fetchAuthCapabilities(authBaseUrl);
+      const useBridge = cached ? useBridgeGuess : Boolean(capabilities.bridge ?? true);
+      const useRelay = Boolean(capabilities.relay ?? true);
+      const finalUrl = loginUrlFor(authBaseUrl, state, useBridge);
+
+      if (popup && !popup.closed && finalUrl !== initialUrl) {
+        try { popup.location.href = finalUrl; } catch (_error) {}
+      }
+
+      // Relay + poll even when the first popup was blocked — dialog / second open still share state.
       if (useRelay) {
         try { relayFrame = mountRelayIframe(authBaseUrl, state); } catch (_error) {}
       }
@@ -317,13 +376,13 @@ export function createPatreonAuthController({
       pollTimer = window.setInterval(async () => {
         if (finished) return;
         if (Date.now() - started > timeoutMs) {
-          fail("RNK: Patreon login timed out.");
+          fail("RNK: Patreon login timed out. Click Patreon Login again and allow popups.");
           return;
         }
         await pollOnce();
       }, 500);
 
-      ui.notifications?.info?.("RNK: Complete Patreon login in the popup, then return here.");
+      ui.notifications?.info?.("RNK: Complete Patreon login, then return to Foundry.");
     });
 
     return loginInFlight;
@@ -379,6 +438,7 @@ export function createPatreonAuthController({
     isExpired,
     login,
     logout,
+    prefetchCapabilities,
     bindUI,
     syncStatusChip,
     setToken: writeToken,

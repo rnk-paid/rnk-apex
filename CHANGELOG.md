@@ -1,5 +1,11 @@
 # Changelog
 
+## v4.2.3 — 2026-07-26
+
+- Fix Patreon popup blocked after capabilities fetch (open popup in the same click turn)
+- If popups are still blocked, show a Foundry dialog with an Open Patreon Login button
+- Keep relay iframe + token polling running so login can finish after Allow
+
 ## v4.2.2 — 2026-07-26
 
 - Fix Patreon unlock when Foundry opens system Chrome (no `window.opener`)
